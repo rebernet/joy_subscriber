@@ -1,0 +1,17 @@
+<package>
+  <description brief="joy_subscriber">
+
+     joy_subscriber
+
+  </description>
+  <author>remo</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/joy_subscriber</url>
+  <depend package="roscpp"/>
+  <depend package="joy"/>
+  <depend package="tf"/>
+
+</package>
+
+
