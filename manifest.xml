@@ -11,6 +11,9 @@
   <depend package="roscpp"/>
   <depend package="joy"/>
   <depend package="tf"/>
+  <depend package="planning_msgs"/>
+  <depend package="repelling_velocity_msgs"/>
+  <depend package="asctec_hl_comm"/>
 
 </package>
 
