@@ -62,7 +62,7 @@ public:
 
     tf::StampedTransform UAVToWorldTf;
     try {
-	  tf_listener_.waitForTransform(world_frame_,base_frame_,ros::Time::now(), ros::Duration(3.0));
+      tf_listener_.waitForTransform(world_frame_,base_frame_,ros::Time::now(), ros::Duration(3.0));
       tf_listener_.lookupTransform(world_frame_,base_frame_,ros::Time(0),UAVToWorldTf);
       send_commands_ = !simulation_;
     } catch(tf::TransformException& ex){
@@ -88,12 +88,30 @@ public:
 
 	void callback(const sensor_msgs::Joy::ConstPtr& msg)
 	{
-    if (msg->buttons[8] && !last_message_.buttons[8])
+    if (msg->axes.size()==6 && last_message_.buttons.size()==12)// Logitech Controller && last_message_ is not empty!
     {
-      xy_repelling_velocity_ = !xy_repelling_velocity_;
+      if (msg->buttons[8] && !last_message_.buttons[8])
+        xy_repelling_velocity_ = !xy_repelling_velocity_;
+      if (msg->buttons[9] && !last_message_.buttons[9])
+        full_repelling_velocity_ = !full_repelling_velocity_;
+      if (msg->buttons[6] && msg->buttons[7])// Reset!
+      {
+        ROS_WARN("Reset! Deactivated repelling velocity!");
+        first_ = true;
+        xy_repelling_velocity_ = false;
+        full_repelling_velocity_ = false;
+        tf::StampedTransform UAVToWorldTf;
+        try {
+          tf_listener_.waitForTransform(world_frame_,base_frame_,ros::Time::now(), ros::Duration(3.0));
+          tf_listener_.lookupTransform(world_frame_,base_frame_,ros::Time(0),UAVToWorldTf);
+        } catch(tf::TransformException& ex){
+          ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", not sending commands!");
+          send_commands_ = false;
+        }
+        last_transform_.setOrigin(UAVToWorldTf.getOrigin());
+        last_transform_.setRotation(UAVToWorldTf.getRotation());
+      }
     }
-    if (msg->buttons[9] && !last_message_.buttons[9])
-      full_repelling_velocity_ = !full_repelling_velocity_;
 
     last_message_ = *msg;
   }
@@ -116,7 +134,7 @@ public:
     past = now;
 
     static float pos[4] = {0.0, 0.0, 0.0, 0.0};
-    if ((first_ && send_commands_)||simulation_)// if send_commands_ is off last_transform is empty
+    if ((first_ && send_commands_) || simulation_)// if send_commands_ is off last_transform is empty
     {
       pos[0] = last_transform_.getOrigin().x();
       pos[1] = last_transform_.getOrigin().y();
@@ -138,7 +156,7 @@ public:
       vel[2] += last_repelling_velocity_.z;
 #endif
 
-    if (last_message_.axes.size() == 3) // wait for first joy message
+    if (last_message_.axes.size() == 3) // Joystick
 		{
       vel[0] += last_message_.axes[1]*lin_velocity_;
       vel[1] += last_message_.axes[0]*lin_velocity_;
@@ -146,7 +164,7 @@ public:
 //      last_message_.axes[2] = pos[2] - 1 + last_repelling_velocity_.z;
       vel[3] += (last_message_.buttons[3] - last_message_.buttons[4])*ang_velocity_;  //yaw angle
 		}
-    else if (last_message_.axes.size() == 6)
+    else if (last_message_.axes.size() == 6) // Logitech Controller
     {
       vel[0] += (last_message_.axes[3]*cos(pos[3])-last_message_.axes[2]*sin(pos[3]))*lin_velocity_;
       vel[1] += (last_message_.axes[3]*sin(pos[3])+last_message_.axes[2]*cos(pos[3]))*lin_velocity_;
@@ -183,17 +201,17 @@ public:
       if (!simulation_)
         last_transform_=transform;
       else
-	  {
-	    tf::StampedTransform UAVToWorldTf;
-	    try {
-		  tf_listener_.waitForTransform(world_frame_,base_frame_,ros::Time::now(), ros::Duration(3.0));
-	      tf_listener_.lookupTransform(world_frame_,base_frame_,ros::Time(0),UAVToWorldTf);
-	    } catch(tf::TransformException& ex){
-	      ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", not sending commands!");
-	    }
-	    last_transform_.setOrigin(UAVToWorldTf.getOrigin());
-	    last_transform_.setRotation(UAVToWorldTf.getRotation());
-	  }
+      {
+        tf::StampedTransform UAVToWorldTf;
+        try {
+          tf_listener_.waitForTransform(world_frame_,base_frame_,ros::Time::now(), ros::Duration(3.0));
+          tf_listener_.lookupTransform(world_frame_,base_frame_,ros::Time(0),UAVToWorldTf);
+        } catch(tf::TransformException& ex){
+          ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", not sending commands!");
+        }
+        last_transform_.setOrigin(UAVToWorldTf.getOrigin());
+        last_transform_.setRotation(UAVToWorldTf.getRotation());
+      }
       first_ = false;
     }
 #endif
