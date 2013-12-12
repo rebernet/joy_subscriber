@@ -21,7 +21,7 @@ public:
   SubscribeAndPublish(ros::NodeHandle& nh)
     : rate_(10.0), // [Hz]
       world_frame_("world"),
-      base_frame_("fcu"),
+      base_frame_("vicon/hummy_student/hummy_student"),
       set_point_viz_frame_("fcu"),
       lin_velocity_(0.5), // [m/s]
       max_vel_(1.5),
@@ -50,6 +50,10 @@ public:
     private_nh.param("max_velocity",max_vel_,max_vel_);
     private_nh.param("z_gain",z_gain_,z_gain_);
     private_nh.param("ang_velocity",ang_velocity_,ang_velocity_);
+    
+    simulation_ = set_point_viz_frame_ == base_frame_;
+    if (simulation_)
+		ROS_INFO("set_point_viz_frame_ == base_frame_, not sending commands but visualizing repelling velocity");
 
     // Scale velocities with loop rate
 //    lin_velocity_ /= rate;
@@ -57,10 +61,10 @@ public:
 //    ang_velocity_ /= rate;
 
     tf::StampedTransform UAVToWorldTf;
-    tf::TransformListener tf_listener;
     try {
-      tf_listener.lookupTransform(world_frame_,base_frame_,ros::Time(0),UAVToWorldTf);
-      send_commands_ = true;
+	  tf_listener_.waitForTransform(world_frame_,base_frame_,ros::Time::now(), ros::Duration(3.0));
+      tf_listener_.lookupTransform(world_frame_,base_frame_,ros::Time(0),UAVToWorldTf);
+      send_commands_ = !simulation_;
     } catch(tf::TransformException& ex){
       ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", not sending commands!");
     }
@@ -68,7 +72,7 @@ public:
     last_transform_.setRotation(UAVToWorldTf.getRotation());
 
     // Advertise
-    ctrl_pub_ = nh.advertise<asctec_hl_comm::mav_ctrl>("fcu/control", 10);
+    ctrl_pub_ = nh.advertise<asctec_hl_comm::mav_ctrl>("hummy/fcu/control", 10);
 
     // Subscribe
     joy_sub_ = nh.subscribe("joy", 1, &SubscribeAndPublish::callback, this);
@@ -112,7 +116,7 @@ public:
     past = now;
 
     static float pos[4] = {0.0, 0.0, 0.0, 0.0};
-    if (first_ && send_commands_)// if send_commands_ is off last_transform is empty
+    if ((first_ && send_commands_)||simulation_)// if send_commands_ is off last_transform is empty
     {
       pos[0] = last_transform_.getOrigin().x();
       pos[1] = last_transform_.getOrigin().y();
@@ -167,15 +171,29 @@ public:
     tf::Transform transform;
     transform.setOrigin(tf::Vector3(pos[0], pos[1], pos[2]));
     transform.setRotation(tf::Quaternion(tf::Vector3(0.0, 0.0, 1.0), pos[3]));
-    br.sendTransform(tf::StampedTransform(transform, now, world_frame_, set_point_viz_frame_));
+    if (!simulation_)
+		br.sendTransform(tf::StampedTransform(transform, now, world_frame_, set_point_viz_frame_));
 #ifndef __NO_OCTOMAP__
-    if (first_ || (transform.getOrigin()-last_transform_.getOrigin()).length2()>=0.1*0.1){//TODO make resolution parameter
+    if (first_  || simulation_ || (transform.getOrigin()-last_transform_.getOrigin()).length2()>=0.1*0.1){//TODO make resolution parameter
       planning_msgs::publishPointsInBBX::Request req;
       planning_msgs::publishPointsInBBX::Response res;
       req.header.frame_id = set_point_viz_frame_;
-      req.header.stamp = now;
+      req.header.stamp = ros::Time(0);//now;
       client_.call(req,res);
-      last_transform_=transform;
+      if (!simulation_)
+        last_transform_=transform;
+      else
+	  {
+	    tf::StampedTransform UAVToWorldTf;
+	    try {
+		  tf_listener_.waitForTransform(world_frame_,base_frame_,ros::Time::now(), ros::Duration(3.0));
+	      tf_listener_.lookupTransform(world_frame_,base_frame_,ros::Time(0),UAVToWorldTf);
+	    } catch(tf::TransformException& ex){
+	      ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", not sending commands!");
+	    }
+	    last_transform_.setOrigin(UAVToWorldTf.getOrigin());
+	    last_transform_.setRotation(UAVToWorldTf.getRotation());
+	  }
       first_ = false;
     }
 #endif
@@ -207,10 +225,11 @@ private:
   double max_vel_;
   double ang_velocity_;
   double z_gain_;
-  bool full_repelling_velocity_, xy_repelling_velocity_, send_commands_;
+  bool full_repelling_velocity_, xy_repelling_velocity_, send_commands_, simulation_;
 
   ros::Publisher ctrl_pub_;
   ros::Subscriber joy_sub_, rep_vel_sub_;
+  tf::TransformListener tf_listener_;
 
   ros::ServiceClient client_;
 
