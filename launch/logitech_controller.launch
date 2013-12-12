@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="ISO-8859-15"?>
+<launch>
+    <node name="logitech_node" pkg="joy" type="joy_node" clear_params="false" />
+    <node name="logitech" pkg="joy_subscriber" type="joy_listener" clear_params="true" output="screen">
+	<param name="rate" value="10.0" />
+	<param name="world_frame" value="world" />
+	<param name="base_frame" value="fcu" />
+	<param name="set_point_viz_frame" value="fcu" />
+	<param name="lin_velocity" value="0.5" />
+	<param name="max_velocity" value="1.5" />
+	<param name="z_gain" value="1.0" /><!--not used!-->
+	<param name="ang_velocity" value="0.6" />
+    </node>
+</launch>
