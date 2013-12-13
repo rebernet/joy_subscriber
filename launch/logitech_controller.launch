@@ -4,7 +4,7 @@
     <node name="logitech" pkg="joy_subscriber" type="joy_listener" clear_params="true" output="screen">
 	<param name="rate" value="10.0" />
 	<param name="world_frame" value="world" />
-	<param name="base_frame" value="fcu" />
+	<param name="base_frame" value="vicon/hummy_student/hummy_student" />
 	<param name="set_point_viz_frame" value="fcu" />
 	<param name="lin_velocity" value="0.5" />
 	<param name="max_velocity" value="1.5" />
