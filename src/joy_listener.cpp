@@ -6,7 +6,6 @@
 #define __NO_OCTOMAP__
 
 #ifndef __NO_OCTOMAP__
-#include <planning_msgs/publishPointsInBBX.h>
 #include <repelling_velocity_msgs/repelling_velocity.h>
 #endif
 
@@ -30,6 +29,7 @@ public:
       first_(true),
       full_repelling_velocity_(false),
       xy_repelling_velocity_(false),
+      z_vel_offset_(0.0),
       send_commands_(false)
 	{
 #ifndef __NO_OCTOMAP__
@@ -53,12 +53,7 @@ public:
     
     simulation_ = set_point_viz_frame_ == base_frame_;
     if (simulation_)
-		ROS_INFO("set_point_viz_frame_ == base_frame_, not sending commands but visualizing repelling velocity");
-
-    // Scale velocities with loop rate
-//    lin_velocity_ /= rate;
-//    z_gain_ /= rate;
-//    ang_velocity_ /= rate;
+      ROS_INFO("set_point_viz_frame_ == base_frame_, not sending commands but visualizing repelling velocity");
 
     tf::StampedTransform UAVToWorldTf;
     try {
@@ -79,17 +74,21 @@ public:
 #ifndef __NO_OCTOMAP__
     rep_vel_sub_ = nh.subscribe("repelling_velocity", 1, &SubscribeAndPublish::rep_vel_callback, this);
 #endif
-
-#ifndef __NO_OCTOMAP__
-    // Service Caller
-    client_ = nh.serviceClient<planning_msgs::publishPointsInBBX>("publishPointsInBBX");
-#endif
 	}
 
 	void callback(const sensor_msgs::Joy::ConstPtr& msg)
 	{
     if (msg->axes.size()==6 && last_message_.buttons.size()==12)// Logitech Controller && last_message_ is not empty!
     {
+#ifndef __NO_OCTOMAP__
+      if (msg->buttons[3] && !last_message_.buttons[3])
+      {
+        if (z_vel_offset_)
+          z_vel_offset_ = 0.0;
+        else
+          z_vel_offset_ = -last_repelling_velocity_.z;
+      }
+#endif
       if (msg->buttons[8] && !last_message_.buttons[8])
         xy_repelling_velocity_ = !xy_repelling_velocity_;
       if (msg->buttons[9] && !last_message_.buttons[9])
@@ -153,7 +152,7 @@ public:
       vel[1] += last_repelling_velocity_.y;
     }
     if (full_repelling_velocity_)
-      vel[2] += last_repelling_velocity_.z;
+      vel[2] += last_repelling_velocity_.z+z_vel_offset_;
 #endif
 
     if (last_message_.axes.size() == 3) // Joystick
@@ -193,11 +192,11 @@ public:
 		br.sendTransform(tf::StampedTransform(transform, now, world_frame_, set_point_viz_frame_));
 #ifndef __NO_OCTOMAP__
     if (first_  || simulation_ || (transform.getOrigin()-last_transform_.getOrigin()).length2()>=0.1*0.1){//TODO make resolution parameter
-      planning_msgs::publishPointsInBBX::Request req;
-      planning_msgs::publishPointsInBBX::Response res;
-      req.header.frame_id = set_point_viz_frame_;
-      req.header.stamp = ros::Time(0);//now;
-      client_.call(req,res);
+//      planning_msgs::publishPointsInBBX::Request req;
+//      planning_msgs::publishPointsInBBX::Response res;
+//      req.header.frame_id = set_point_viz_frame_;
+//      req.header.stamp = ros::Time(0);//now;
+//      client_.call(req,res);
       if (!simulation_)
         last_transform_=transform;
       else
@@ -243,13 +242,12 @@ private:
   double max_vel_;
   double ang_velocity_;
   double z_gain_;
-  bool full_repelling_velocity_, xy_repelling_velocity_, send_commands_, simulation_;
+  bool full_repelling_velocity_, xy_repelling_velocity_, constant_height_, send_commands_, simulation_;
+  float z_vel_offset_;
 
   ros::Publisher ctrl_pub_;
   ros::Subscriber joy_sub_, rep_vel_sub_;
   tf::TransformListener tf_listener_;
-
-  ros::ServiceClient client_;
 
   tf::Transform last_transform_;
 
